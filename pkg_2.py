@@ -6,7 +6,6 @@ import csv
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QFileDialog,
                               QTableWidgetItem, QHeaderView, QMessageBox)
 from PyQt5.QtCore import QThread, pyqtSignal, QMutex, QWaitCondition
-from PIL import Image
 
 from mainwindow_ui import Ui_MainWindow
 
@@ -87,35 +86,26 @@ class ImageParser:
             'compression': 'N/A', 'filesize': 'N/A',
             'status': 'ok', 'error': None,
         }
-        
         try:
             file_size = os.path.getsize(filepath)
         except OSError as e:
-            return ImageParser._err(info, 'stat',
-                f"Не удалось получить размер файла: {e.strerror or e}")
+            return ImageParser._err(info, 'stat', f"Не удалось получить размер файла: {e.strerror or e}")
         
         if file_size == 0:
-            return ImageParser._err(info, 'empty', "Файл пустой (0 байт)",
-                                    fmt='Not an image')
-        
+            return ImageParser._err(info, 'empty', "Файл пустой (0 байт)", fmt='Not an image')
         if file_size < 14:
-            return ImageParser._err(info, 'too_short',
-                f"Файл слишком короткий: {file_size} байт (< 14)",
-                fmt='Not an image')
+            return ImageParser._err(info, 'too_short', f"Файл слишком короткий: {file_size} байт (< 14)", fmt='Not an image')
         
         try:
             f = open(filepath, 'rb', buffering=0)
         except OSError as e:
-            return ImageParser._err(info, 'open',
-                f"Не удалось открыть файл: {e.strerror or e}")
+            return ImageParser._err(info, 'open', f"Не удалось открыть файл: {e.strerror or e}")
         
         try:
             with f:
                 header = f.read(16)
                 if len(header) < 14:
-                    return ImageParser._err(info, 'header',
-                        f"Обрезан заголовок: прочитано {len(header)} из 14 байт",
-                        fmt='Not an image')
+                    return ImageParser._err(info, 'header', f"Обрезан заголовок: прочитано {len(header)} из 14 байт", fmt='Not an image')
                 
                 f.seek(0)
                 probe = f.read(1024)
@@ -128,15 +118,10 @@ class ImageParser:
                 is_pcx = (len(header) >= 4 and header[0] == 0x0A and header[2] == 0x01)
                 
                 if not (is_png or is_bmp or is_gif or is_jpg or is_tif or is_pcx):
-                    fmt_name, descr = ImageParser._classify_non_image(
-                        header, probe, file_size)
+                    fmt_name, descr = ImageParser._classify_non_image(header, probe, file_size)
                     if fmt_name:
-                        return ImageParser._err(info, 'not_image',
-                            f"Файл не является изображением: {descr}",
-                            fmt=fmt_name)
-                    return ImageParser._err(info, 'signature',
-                        f"Формат не распознан (сигнатура: {header[:8].hex(' ')})",
-                        fmt='Unknown')
+                        return ImageParser._err(info, 'not_image', f"Файл не является изображением: {descr}", fmt=fmt_name)
+                    return ImageParser._err(info, 'signature', f"Формат не распознан (сигнатура: {header[:8].hex(' ')})", fmt='Unknown')
                 
                 if is_png:
                     return ImageParser._parse_png(f, info, file_size)
@@ -147,20 +132,15 @@ class ImageParser:
                 elif is_jpg:
                     return ImageParser._parse_jpeg(f, info, file_size)
                 elif is_tif:
-                    return ImageParser._parse_tiff(f, info)
+                    return ImageParser._parse_tiff(f, info, file_size)
                 elif is_pcx:
                     return ImageParser._parse_pcx_raw(f, info, file_size)
-                    
         except OSError as e:
-            return ImageParser._err(info, 'io',
-                f"Ошибка ввода-вывода: {e.strerror or e}")
+            return ImageParser._err(info, 'io', f"Ошибка ввода-вывода: {e.strerror or e}")
         except (struct.error, ValueError, OverflowError, TypeError) as e:
-            return ImageParser._err(info, 'parse',
-                f"Ошибка разбора: {type(e).__name__}: {e}")
+            return ImageParser._err(info, 'parse', f"Ошибка разбора: {type(e).__name__}: {e}")
         except Exception as e:
-            return ImageParser._err(info, 'unknown',
-                f"Неизвестная ошибка: {type(e).__name__}: {e}")
-        
+            return ImageParser._err(info, 'unknown', f"Неизвестная ошибка: {type(e).__name__}: {e}")
         return info
 
     @staticmethod
@@ -169,39 +149,27 @@ class ImageParser:
         info['compression'] = 'Lossless (DEFLATE)'
         info['filesize'] = f"{file_size / 1024:.1f}"
         info['dpi'] = "Не задано (72x72 дефолт)"
-        
         f.seek(16)
         ihdr = f.read(10)
         if len(ihdr) < 10:
-            return ImageParser._err(info, 'IHDR',
-                f"PNG: обрезан IHDR (прочитано {len(ihdr)} из 10 байт)")
-        
+            return ImageParser._err(info, 'IHDR', f"PNG: обрезан IHDR (прочитано {len(ihdr)} из 10 байт)")
         width = int.from_bytes(ihdr[0:4], 'big')
         height = int.from_bytes(ihdr[4:8], 'big')
         bit_depth = ihdr[8]
         color_type = ihdr[9]
-        
         if width == 0 or height == 0:
-            return ImageParser._err(info, 'IHDR',
-                f"PNG: некорректные размеры {width}x{height}")
-        
-        valid_depths = {0: {1, 2, 4, 8, 16}, 2: {8, 16},
-                       3: {1, 2, 4, 8}, 4: {8, 16}, 6: {8, 16}}
+            return ImageParser._err(info, 'IHDR', f"PNG: некорректные размеры {width}x{height}")
+        valid_depths = {0: {1, 2, 4, 8, 16}, 2: {8, 16}, 3: {1, 2, 4, 8}, 4: {8, 16}, 6: {8, 16}}
         if color_type not in valid_depths:
-            return ImageParser._err(info, 'IHDR',
-                f"PNG: неизвестный color_type={color_type}")
+            return ImageParser._err(info, 'IHDR', f"PNG: неизвестный color_type={color_type}")
         if bit_depth not in valid_depths[color_type]:
-            return ImageParser._err(info, 'IHDR',
-                f"PNG: bit_depth={bit_depth} недопустим для color_type={color_type}")
-        
+            return ImageParser._err(info, 'IHDR', f"PNG: bit_depth={bit_depth} недопустим для color_type={color_type}")
         info['size'] = f'{width}x{height}'
         channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color_type]
         info['depth'] = f"{bit_depth * channels} bit"
-        
         saw_iend = False
         saw_idat = False
         f.seek(8)
-        
         while True:
             lb = f.read(4)
             if len(lb) < 4:
@@ -209,32 +177,23 @@ class ImageParser:
             length = int.from_bytes(lb, 'big')
             ctype = f.read(4)
             if len(ctype) < 4:
-                return ImageParser._err(info, 'chunk',
-                    "PNG: обрезан заголовок чанка (нет типа)")
-            
+                return ImageParser._err(info, 'chunk', "PNG: обрезан заголовок чанка (нет типа)")
             chunk_data = f.read(length)
             if len(chunk_data) < length:
-                return ImageParser._err(info, 'chunk',
-                    f"PNG: обрезаны данные чанка {ctype!r}")
-            
+                return ImageParser._err(info, 'chunk', f"PNG: обрезаны данные чанка {ctype!r}")
             crc_raw = f.read(4)
             if len(crc_raw) < 4:
-                return ImageParser._err(info, 'chunk',
-                    f"PNG: обрезан CRC чанка {ctype!r}")
-            
+                return ImageParser._err(info, 'chunk', f"PNG: обрезан CRC чанка {ctype!r}")
             expected_crc = int.from_bytes(crc_raw, 'big')
             actual_crc = zlib.crc32(ctype + chunk_data) & 0xffffffff
             if expected_crc != actual_crc:
-                return ImageParser._err(info, 'corrupted',
-                    f"PNG: повреждение данных — неверная CRC чанка {ctype!r}")
-            
+                return ImageParser._err(info, 'corrupted', f"PNG: повреждение данных — неверная CRC чанка {ctype!r}")
             if ctype == b'pHYs' and length == 9:
                 ppmx = int.from_bytes(chunk_data[0:4], 'big')
                 ppmy = int.from_bytes(chunk_data[4:8], 'big')
                 unit = chunk_data[8]
                 if unit == 1 and ppmx > 0 and ppmy > 0:
-                    info['dpi'] = (f"{int(ppmx * ImageParser.METER_TO_INCH)}x"
-                                   f"{int(ppmy * ImageParser.METER_TO_INCH)}")
+                    info['dpi'] = f"{int(ppmx * ImageParser.METER_TO_INCH)}x{int(ppmy * ImageParser.METER_TO_INCH)}"
                 continue
             if ctype == b'IDAT':
                 saw_idat = True
@@ -242,14 +201,10 @@ class ImageParser:
             if ctype == b'IEND':
                 saw_iend = True
                 break
-        
         if not saw_iend:
-            return ImageParser._err(info, 'IEND',
-                "PNG: файл оборван до чанка IEND (изображение не завершено)")
+            return ImageParser._err(info, 'IEND', "PNG: файл оборван до чанка IEND (изображение не завершено)")
         if not saw_idat:
-            return ImageParser._err(info, 'IDAT',
-                "PNG: отсутствуют данные изображения (IDAT)")
-        
+            return ImageParser._err(info, 'IDAT', "PNG: отсутствуют данные изображения (IDAT)")
         return info
 
     @staticmethod
@@ -257,27 +212,19 @@ class ImageParser:
         info['format'] = 'BMP'
         info['filesize'] = f"{file_size / 1024:.1f}"
         info['dpi'] = "Не задано (72x72 дефолт)"
-        
         f.seek(2)
         declared_size = int.from_bytes(f.read(4), 'little')
         if declared_size != 0 and declared_size != file_size:
-            return ImageParser._err(info, 'header',
-                f"BMP: несоответствие размера — заголовок заявляет "
-                f"{declared_size} байт, реально {file_size}")
-        
+            return ImageParser._err(info, 'header', f"BMP: несоответствие размера — заголовок заявляет {declared_size} байт, реально {file_size}")
         f.seek(14)
         dib_raw = f.read(4)
         if len(dib_raw) < 4:
-            return ImageParser._err(info, 'DIB',
-                f"BMP: обрезан размер DIB (прочитано {len(dib_raw)} из 4)")
-        
+            return ImageParser._err(info, 'DIB', f"BMP: обрезан размер DIB (прочитано {len(dib_raw)} из 4)")
         dib_size = int.from_bytes(dib_raw, 'little')
-        
         if dib_size == 12:
             wh = f.read(8)
             if len(wh) < 8:
-                return ImageParser._err(info, 'DIB',
-                    f"BMP(CORE): обрезан заголовок")
+                return ImageParser._err(info, 'DIB', "BMP(CORE): обрезан заголовок")
             width = int.from_bytes(wh[0:2], 'little')
             height = int.from_bytes(wh[2:4], 'little')
             bpp = int.from_bytes(wh[6:8], 'little')
@@ -285,8 +232,7 @@ class ImageParser:
         elif dib_size >= 40:
             buf = f.read(36)
             if len(buf) < 36:
-                return ImageParser._err(info, 'DIB',
-                    f"BMP(INFO): обрезан заголовок")
+                return ImageParser._err(info, 'DIB', "BMP(INFO): обрезан заголовок")
             width = int.from_bytes(buf[0:4], 'little', signed=True)
             height = abs(int.from_bytes(buf[4:8], 'little', signed=True))
             bpp = int.from_bytes(buf[10:12], 'little')
@@ -301,20 +247,14 @@ class ImageParser:
                 info['compression'] = 'Bitfields'
             else:
                 info['compression'] = f'Compressed ({comp})'
-            
             ppmx = int.from_bytes(buf[24:28], 'little', signed=True)
             ppmy = int.from_bytes(buf[28:32], 'little', signed=True)
             if ppmx > 0 and ppmy > 0:
-                info['dpi'] = (f"{int(ppmx * ImageParser.METER_TO_INCH)}x"
-                               f"{int(ppmy * ImageParser.METER_TO_INCH)}")
+                info['dpi'] = f"{int(ppmx * ImageParser.METER_TO_INCH)}x{int(ppmy * ImageParser.METER_TO_INCH)}"
         else:
-            return ImageParser._err(info, 'DIB',
-                f"BMP: неизвестный размер DIB={dib_size}")
-        
+            return ImageParser._err(info, 'DIB', f"BMP: неизвестный размер DIB={dib_size}")
         if width <= 0 or height == 0:
-            return ImageParser._err(info, 'DIB',
-                f"BMP: некорректные размеры {width}x{height}")
-        
+            return ImageParser._err(info, 'DIB', f"BMP: некорректные размеры {width}x{height}")
         info['size'] = f'{width}x{height}'
         info['depth'] = f'{bpp} bit'
         return info
@@ -325,31 +265,21 @@ class ImageParser:
         info['compression'] = 'Lossless (LZW)'
         info['filesize'] = f"{file_size / 1024:.1f}"
         info['dpi'] = "Не задано (72x72 дефолт)"
-        
         f.seek(6)
         whp = f.read(5)
         if len(whp) < 5:
-            return ImageParser._err(info, 'LSD',
-                f"GIF: обрезан Logical Screen Descriptor")
-        
+            return ImageParser._err(info, 'LSD', "GIF: обрезан Logical Screen Descriptor")
         width = int.from_bytes(whp[0:2], 'little')
         height = int.from_bytes(whp[2:4], 'little')
-        
         if width == 0 or height == 0:
-            return ImageParser._err(info, 'LSD',
-                f"GIF: нулевые размеры {width}x{height}")
-        
+            return ImageParser._err(info, 'LSD', f"GIF: нулевые размеры {width}x{height}")
         info['size'] = f'{width}x{height}'
         info['depth'] = f"{(whp[4] & 7) + 1} bit"
-        
         tail_size = min(1024, file_size)
         f.seek(-tail_size, 2)
         tail = f.read(tail_size)
-        
         if b'\x3b' not in tail:
-            return ImageParser._err(info, 'trailer',
-                "GIF: отсутствует трейлер 0x3B (файл оборван)")
-        
+            return ImageParser._err(info, 'trailer', "GIF: отсутствует трейлер 0x3B (файл оборван)")
         return info
 
     @staticmethod
@@ -358,67 +288,46 @@ class ImageParser:
         info['compression'] = 'Lossy (JPEG)'
         info['filesize'] = f"{file_size / 1024:.1f}"
         info['dpi'] = "Не задано (72x72 дефолт)"
-        
         f.seek(2)
         sof_found = False
-        
         while True:
             mb = f.read(2)
             if len(mb) < 2:
-                return ImageParser._err(info, 'EOF',
-                    "JPEG: файл оборван до маркера SOF (нет размеров)")
-            
+                return ImageParser._err(info, 'EOF', "JPEG: файл оборван до маркера SOF (нет размеров)")
             if mb[0] != 0xFF:
-                return ImageParser._err(info, 'marker',
-                    f"JPEG: потеряна синхронизация маркеров "
-                    f"(байт 0x{mb[0]:02X} вместо 0xFF)")
-            
+                return ImageParser._err(info, 'marker', f"JPEG: потеряна синхронизация маркеров (байт 0x{mb[0]:02X} вместо 0xFF)")
             marker = int.from_bytes(mb, 'big')
-            
-            if (0xffc0 <= marker <= 0xffcf and 
-                marker not in (0xffc4, 0xffc8, 0xffcc)):
+            if (0xffc0 <= marker <= 0xffcf and marker not in (0xffc4, 0xffc8, 0xffcc)):
                 seg_len_raw = f.read(2)
                 if len(seg_len_raw) < 2:
-                    return ImageParser._err(info, 'SOF',
-                        "JPEG: обрезан SOF (нет длины)")
+                    return ImageParser._err(info, 'SOF', "JPEG: обрезан SOF (нет длины)")
                 chunk = f.read(6)
                 if len(chunk) < 6:
-                    return ImageParser._err(info, 'SOF',
-                        f"JPEG: обрезан SOF")
-                
+                    return ImageParser._err(info, 'SOF', "JPEG: обрезан SOF")
                 precision = chunk[0]
                 h = int.from_bytes(chunk[1:3], 'big')
                 w = int.from_bytes(chunk[3:5], 'big')
                 channels = chunk[5]
-                
                 if w == 0 or h == 0:
-                    return ImageParser._err(info, 'SOF',
-                        f"JPEG: нулевые размеры {w}x{h}")
-                
+                    return ImageParser._err(info, 'SOF', f"JPEG: нулевые размеры {w}x{h}")
                 info['size'] = f'{w}x{h}'
                 info['depth'] = f"{precision * channels} bit"
                 sof_found = True
-                
                 sof_seg_len = int.from_bytes(seg_len_raw, 'big')
                 sof_payload_left = sof_seg_len - 2 - 6
                 if sof_payload_left > 0:
                     f.seek(sof_payload_left, 1)
                 break
-            
             elif marker == 0xffe0:
                 lb = f.read(2)
                 if len(lb) < 2:
-                    return ImageParser._err(info, 'APP0',
-                        "JPEG: обрезан APP0 (нет длины)")
+                    return ImageParser._err(info, 'APP0', "JPEG: обрезан APP0 (нет длины)")
                 length = int.from_bytes(lb, 'big')
                 if length < 2:
-                    return ImageParser._err(info, 'APP0',
-                        f"JPEG: битая длина APP0={length}")
+                    return ImageParser._err(info, 'APP0', f"JPEG: битая длина APP0={length}")
                 app0 = f.read(length - 2)
                 if len(app0) < length - 2:
-                    return ImageParser._err(info, 'APP0',
-                        f"JPEG: обрезан APP0")
-                
+                    return ImageParser._err(info, 'APP0', "JPEG: обрезан APP0")
                 if app0.startswith(b'JFIF\x00') and len(app0) >= 12:
                     unit = app0[7]
                     xd = int.from_bytes(app0[8:10], 'big')
@@ -427,72 +336,272 @@ class ImageParser:
                         info['dpi'] = f"{xd}x{yd}"
                     elif unit == 2:
                         info['dpi'] = f"{int(xd * 2.54)}x{int(yd * 2.54)}"
-            
             elif marker in (0xffd8, 0xffd9) or 0xffd0 <= marker <= 0xffd7:
                 continue
             else:
                 lb = f.read(2)
                 if len(lb) < 2:
-                    return ImageParser._err(info, 'segment',
-                        f"JPEG: обрезан сегмент 0x{marker:04X}")
+                    return ImageParser._err(info, 'segment', f"JPEG: обрезан сегмент 0x{marker:04X}")
                 length = int.from_bytes(lb, 'big')
                 if length < 2:
-                    return ImageParser._err(info, 'segment',
-                        f"JPEG: битая длина сегмента 0x{marker:04X} = {length}")
+                    return ImageParser._err(info, 'segment', f"JPEG: битая длина сегмента 0x{marker:04X} = {length}")
                 payload = length - 2
                 f.seek(payload, 1)
-        
         if not sof_found:
-            return ImageParser._err(info, 'SOF',
-                "JPEG: не найден маркер SOF (нет размеров)")
-        
+            return ImageParser._err(info, 'SOF', "JPEG: не найден маркер SOF (нет размеров)")
         tail_size = min(1024, file_size)
         f.seek(-tail_size, 2)
         tail = f.read(tail_size)
-        
         if b'\xff\xd9' not in tail:
-            return ImageParser._err(info, 'truncated',
-                "JPEG: файл оборван — не найден маркер конца (EOI 0xFFD9)")
-        
+            return ImageParser._err(info, 'truncated', "JPEG: файл оборван — не найден маркер конца (EOI 0xFFD9)")
         return info
 
+    
     @staticmethod
-    def _parse_tiff(f, info):
+    def _parse_tiff(f, info, file_size):
         info['format'] = 'TIFF'
-        info['compression'] = 'Lossless (TIFF)'
-        info['size'] = "Заголовок корректен"
-        info['depth'] = "8 бит × Каналы"
-        info['dpi'] = "72x72 (дефолт)"
-        info['filesize'] = "?"
+        info['filesize'] = f"{file_size / 1024:.1f}"
+
+        f.seek(0)
+        header = f.read(8)
+
+        if len(header) < 8:
+            return ImageParser._err(
+                info, 'header', "TIFF: обрезан заголовок"
+            )
+
+        if header[:2] == b'II':
+            endian = '<'
+        elif header[:2] == b'MM':
+            endian = '>'
+        else:
+            return ImageParser._err(
+                info, 'signature', "TIFF: неверный порядок байтов"
+            )
+
+        magic = struct.unpack(endian + 'H', header[2:4])[0]
+
+        if magic != 42:
+            return ImageParser._err(
+                info, 'signature',
+                f"TIFF: неподдерживаемый magic={magic}"
+            )
+
+        ifd_offset = struct.unpack(endian + 'I', header[4:8])[0]
+
+        if ifd_offset < 8 or ifd_offset + 2 > file_size:
+            return ImageParser._err(
+                info, 'IFD', "TIFF: некорректное смещение IFD"
+            )
+
+        f.seek(ifd_offset)
+
+        raw = f.read(2)
+
+        if len(raw) != 2:
+            return ImageParser._err(
+                info, 'IFD', "TIFF: не удалось прочитать IFD"
+            )
+
+        num_entries = struct.unpack(endian + 'H', raw)[0]
+
+        if ifd_offset + 2 + num_entries * 12 > file_size:
+            return ImageParser._err(
+                info, 'IFD', "TIFF: таблица IFD выходит за границы файла"
+            )
+
+        tags = {}
+
+        type_sizes = {
+            1: 1,
+            2: 1,
+            3: 2,
+            4: 4,
+            5: 8,
+            6: 1,
+            7: 1,
+            8: 2,
+            9: 4,
+            10: 8,
+            11: 4, 
+            12: 8
+        }
+
+        def read_values(typ, count, value_field):
+            if typ not in type_sizes or count <= 0:
+                return None
+
+            total_size = type_sizes[typ] * count
+
+            if total_size <= 4:
+                data = value_field[:total_size]
+            else:
+                offset = struct.unpack(
+                    endian + 'I', value_field
+                )[0]
+
+                if offset < 0 or offset + total_size > file_size:
+                    return None
+
+                current_pos = f.tell()
+                f.seek(offset)
+                data = f.read(total_size)
+                f.seek(current_pos)
+
+                if len(data) != total_size:
+                    return None
+
+            formats = {
+                1: 'B',
+                3: 'H',
+                4: 'I',
+                6: 'b',
+                8: 'h',
+                9: 'i',
+                11: 'f',
+                12: 'd'
+            }
+
+            if typ in formats:
+                fmt = endian + formats[typ] * count
+                return list(struct.unpack(fmt, data))
+
+            if typ == 5:
+                values = []
+
+                for i in range(count):
+                    num, den = struct.unpack(
+                        endian + 'II',
+                        data[i * 8:(i + 1) * 8]
+                    )
+
+                    values.append(num / den if den else 0)
+
+                return values
+
+            if typ == 10:
+                values = []
+
+                for i in range(count):
+                    num, den = struct.unpack(
+                        endian + 'ii',
+                        data[i * 8:(i + 1) * 8]
+                    )
+
+                    values.append(num / den if den else 0)
+
+                return values
+
+            return None
+
+        for _ in range(num_entries):
+            entry = f.read(12)
+
+            if len(entry) != 12:
+                return ImageParser._err(
+                    info, 'IFD', "TIFF: повреждена запись IFD"
+                )
+
+            tag, typ, count = struct.unpack(
+                endian + 'HHI', entry[:8]
+            )
+
+            value_field = entry[8:12]
+
+            values = read_values(typ, count, value_field)
+
+            if values is not None:
+                tags[tag] = values
+
+        width = tags.get(256, [None])[0]
+        height = tags.get(257, [None])[0]
+
+        if width is None or height is None:
+            return ImageParser._err(
+                info, 'IFD',
+                "TIFF: не найдены размеры изображения"
+            )
+
+        if width <= 0 or height <= 0:
+            return ImageParser._err(
+                info, 'IFD',
+                f"TIFF: некорректные размеры {width}x{height}"
+            )
+
+        info['size'] = f'{width}x{height}'
+
+        bits = tags.get(258)
+
+        if bits:
+            total_bits = sum(bits)
+            info['depth'] = f'{total_bits} bit'
+        else:
+            info['depth'] = 'N/A'
+
+        compression = tags.get(259, [1])[0]
+
+        comp_map = {
+            1: 'None',
+            2: 'CCITT Huffman',
+            3: 'CCITT Group 3',
+            4: 'CCITT Group 4',
+            5: 'LZW',
+            6: 'JPEG',
+            7: 'JPEG',
+            8: 'DEFLATE',
+            32773: 'PackBits',
+            32946: 'DEFLATE'
+        }
+
+        info['compression'] = comp_map.get(
+            compression,
+            f'Unknown ({compression})'
+        )
+
+        x_res = tags.get(282, [None])[0]
+        y_res = tags.get(283, [None])[0]
+        res_unit = tags.get(296, [2])[0]
+
+        if x_res and y_res:
+            if res_unit == 2:
+                dpi_x = x_res
+                dpi_y = y_res
+            elif res_unit == 3:
+                dpi_x = x_res * 2.54
+                dpi_y = y_res * 2.54
+            elif res_unit == 1:
+                info['dpi'] = 'Единица измерения не задана'
+                return info
+            else:
+                info['dpi'] = 'N/A'
+                return info
+
+            info['dpi'] = f'{dpi_x:.1f}x{dpi_y:.1f}'
+        else:
+            info['dpi'] = 'N/A'
+
         return info
+
 
     @staticmethod
     def _parse_pcx_raw(f, info, file_size):
         info['format'] = 'PCX'
         info['filesize'] = f"{file_size / 1024:.1f}"
-        
         f.seek(0)
         pcx = f.read(128)
         if len(pcx) < 128:
-            return ImageParser._err(info, 'PCX',
-                f"PCX: обрезан заголовок (прочитано {len(pcx)} из 128)")
-        
+            return ImageParser._err(info, 'PCX', f"PCX: обрезан заголовок (прочитано {len(pcx)} из 128)")
         info['compression'] = 'None' if pcx[2] == 0 else 'Lossless (RLE)'
         xmin = int.from_bytes(pcx[4:6], 'little')
         ymin = int.from_bytes(pcx[6:8], 'little')
         xmax = int.from_bytes(pcx[8:10], 'little')
         ymax = int.from_bytes(pcx[10:12], 'little')
-        
         width = xmax - xmin + 1
         height = ymax - ymin + 1
-        
         if width <= 0 or height <= 0:
-            return ImageParser._err(info, 'PCX',
-                f"PCX: некорректные размеры {width}x{height}")
-        
+            return ImageParser._err(info, 'PCX', f"PCX: некорректные размеры {width}x{height}")
         bpp = pcx[3]
         nplanes = pcx[65]
-        
         info['size'] = f'{width}x{height}'
         info['depth'] = f'{bpp * nplanes} bit'
         info['dpi'] = "Не задано (72x72 дефолт)"
