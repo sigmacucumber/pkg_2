@@ -6,7 +6,7 @@ import csv
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QFileDialog,
                               QTableWidgetItem, QHeaderView, QMessageBox)
 from PyQt5.QtCore import QThread, pyqtSignal, QMutex, QWaitCondition
-
+from PyQt5.QtGui import QColor
 from mainwindow_ui import Ui_MainWindow
 
 
@@ -722,12 +722,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
-
+    
+        self.verticalLayoutWidget.setGeometry(0, 0, 0, 0)
+    
+        self.centralwidget.setLayout(self.verticalLayout)
+    
         headers = ['№', 'Имя файла', 'Размер (px)', 'Разрешение (dpi)',
                    'Глубина цвета', 'Сжатие', 'Размер файла (КБ)']
         self.tableResults.setHorizontalHeaderLabels(headers)
         self.tableResults.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tableResults.setRowCount(0)
+        self.tableResults.verticalHeader().setVisible(False)
 
         for chk in [self.chkJPG, self.chkGIF, self.chkTIF,
                     self.chkBMP, self.chkPNG, self.chkPCX]:
@@ -814,6 +819,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.progressBar.setValue(percent)
         self.lblStatus.setText(f'Обработано {current} из {total}')
 
+
     def on_file_processed(self, info):
         row = self.row_counter
         self.tableResults.insertRow(row)
@@ -824,6 +830,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.tableResults.setItem(row, 4, QTableWidgetItem(info['depth']))
         self.tableResults.setItem(row, 5, QTableWidgetItem(info['compression']))
         self.tableResults.setItem(row, 6, QTableWidgetItem(info['filesize']))
+    
+        if info.get('status') != 'ok':
+            color = QColor(255, 180, 180)
+            for col in range(7):
+                item = self.tableResults.item(row, col)
+                if item:
+                    item.setBackground(color)
+    
         self.row_counter += 1
 
     def on_finished(self, success):
@@ -864,6 +878,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                         row_data.append(item.text() if item else '')
                     writer.writerow(row_data)
             QMessageBox.information(self, 'Успех', f'Экспортировано в {filepath}')
+
+
+        def resizeEvent(self, event):
+            self.verticalLayoutWidget.setGeometry(0, 0, self.width(), self.height())
+            super().resizeEvent(event)
 
 
 if __name__ == '__main__':
